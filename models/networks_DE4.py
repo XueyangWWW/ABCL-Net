@@ -196,7 +196,7 @@ def define_S(input_nc, output_nc, ngf, netS, norm='batch', use_dropout=False, in
     if use_gpu:
         assert(torch.cuda.is_available())
 
-    elif netS == 'aCFS-unet':
+    if netS == 'aCFS-unet':
         net = UnetGenerator_SEG(input_nc, output_nc, ngf, trilinear=True, use_duse=True).cuda()   # UNet with a-CFS
     else:
         raise NotImplementedError('Segmentor model name [%s] is not recognized' % netS)
