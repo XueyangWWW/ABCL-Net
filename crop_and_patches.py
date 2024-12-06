@@ -70,7 +70,7 @@ def pad_to_multiple(data, multiple=64):
         mode='constant', constant_values=0)
     return data_padded, (pad_before_D, pad_before_H, pad_before_W)
 
-def extract_patches_64(data, data_t2, data_seg, patch_size=64, stride_d=64, stride_h=64, stride_w=64,
+def extract_patches_64(data, data_t2, data_seg, patch_size=64, stride_d=32, stride_h=32, stride_w=32,
                        base_name='Case_001_T1w', des='patch_T1w', des1='patch_T2w', des2='patch_Seg', des_zero='patch_Zero'):
     """
     Extract patches of size patch_size^3 from the given 3D arrays (T1w, T2w, Seg).
@@ -133,9 +133,9 @@ if __name__ == '__main__':
     parser.add_argument('--base_dir', type=str, default='MRI_data', help='Base directory containing MRI data')
     parser.add_argument('--patch_out_base', type=str, default='patch_data_cutedge', help='Output directory for patches')
     parser.add_argument('--patch_size', type=int, default=64, help='Patch size (cube)')
-    parser.add_argument('--stride_d', type=int, default=64, help='Stride along D dimension')
-    parser.add_argument('--stride_h', type=int, default=64, help='Stride along H dimension')
-    parser.add_argument('--stride_w', type=int, default=64, help='Stride along W dimension')
+    parser.add_argument('--stride_d', type=int, default=32, help='Stride along D dimension')
+    parser.add_argument('--stride_h', type=int, default=32, help='Stride along H dimension')
+    parser.add_argument('--stride_w', type=int, default=32, help='Stride along W dimension')
 
     args = parser.parse_args()
 
