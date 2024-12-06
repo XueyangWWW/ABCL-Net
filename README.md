@@ -44,7 +44,7 @@ Stored two modality MRI and tissue labels in `MRI_data` folder as following stru
 	        ├── Case_004_Seg.nii.gz
 	        ├── ...
 
-Then run the `crop_and_patches.py` to generate training patches, adjust `--patch_size, --stride_d, --stride_h, and --stride_w` as desired. It will be stored in `patch_data_cutedge` as follows:
+Then run the `crop_and_patches.py` to generate training and validation patches (4:1), adjust `--patch_size, --stride_d, --stride_h, and --stride_w` as desired. It will be stored in `patch_data_cutedge` and `patch_data_cutedge_val` as follows:
 
 	patch_data_cutedge/
 	    ├── T1
