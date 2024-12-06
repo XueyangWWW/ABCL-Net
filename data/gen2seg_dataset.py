@@ -47,10 +47,10 @@ class TrainDataset(BaseDataset):
 
     def __getitem__(self, index):
 
-        A_path = os.path.join(self.dir_A, self.A_paths[index])
-        Seg_path = os.path.join(self.dir_Seg, self.Seg_paths[index])
+        A_path = os.path.join(self.A_paths[index])
+        Seg_path = os.path.join(self.Seg_paths[index])
 
-        B_path = os.path.join(self.dir_B, self.B_paths[index])
+        B_path = os.path.join(self.B_paths[index])
 
         A_img = sitk.ReadImage(A_path)
         A_img = sitk.GetArrayFromImage(A_img)
@@ -126,12 +126,12 @@ class ValDataset(BaseDataset):
 
     def __getitem__(self, index):
         A_filename = self.A_filenames[index]
-        A_path = os.path.join(self.dir_A, A_filename)
+        A_path = os.path.join(A_filename)
         A_img = sitk.ReadImage(A_path)
         A_img = sitk.GetArrayFromImage(A_img)
 
         B_filename = self.B_filenames[index]
-        B_path = os.path.join(self.dir_B, B_filename)
+        B_path = os.path.join(B_filename)
         B_img = sitk.ReadImage(B_path)
         B_img = sitk.GetArrayFromImage(B_img)
 
@@ -150,7 +150,7 @@ class ValDataset(BaseDataset):
 
 
         Seg_filename = self.seg_filenames[index]
-        Seg_path = os.path.join(self.dir_Seg, Seg_filename)
+        Seg_path = os.path.join(Seg_filename)
 
         Seg_img = sitk.ReadImage(Seg_path)
         Seg_img = sitk.GetArrayFromImage(Seg_img)
