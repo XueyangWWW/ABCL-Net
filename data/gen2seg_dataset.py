@@ -33,9 +33,9 @@ class TrainDataset(BaseDataset):
         self.opt = opt
         self.root = opt.dataroot_train
 
-        self.dir_A = os.path.join(self.root, 'T1')
-        self.dir_B = os.path.join(self.root, 'T2')
-        self.dir_Seg = os.path.join(self.root, 'label')
+        self.dir_A = os.path.join(self.root, 'T1w')
+        self.dir_B = os.path.join(self.root, 'T2w')
+        self.dir_Seg = os.path.join(self.root, 'Seg')
 
         self.A_paths = sorted(make_dataset(self.dir_A))
         self.Seg_paths = sorted(make_dataset(self.dir_Seg))
@@ -114,9 +114,9 @@ class ValDataset(BaseDataset):
         self.opt = opt
         self.root = opt.dataroot_val
 
-        self.dir_A = os.path.join(self.root, 'T1')
-        self.dir_B = os.path.join(self.root, 'T2')
-        self.dir_Seg = os.path.join(self.root, 'label')
+        self.dir_A = os.path.join(self.root, 'T1w')
+        self.dir_B = os.path.join(self.root, 'T2w')
+        self.dir_Seg = os.path.join(self.root, 'Seg')
 
         self.A_filenames = sorted(make_dataset(self.dir_A))
         self.B_filenames = sorted(make_dataset(self.dir_B))
