@@ -1,21 +1,12 @@
 import os
 import SimpleITK as sitk
 import numpy as np
-
-##################################
-# Part 1: Cropping
-##################################
+import argparse
 
 def cut_edge(data):
     """
-    Automatically trim zero-valued edges from a 3D image array.
-    This finds the bounding box that includes all non-zero voxels.
-
-    Args:
-        data (ndarray): 3D numpy array [D, H, W].
-    Returns:
-        original_shape (list): The original shape [D, H, W].
-        cut_size (list): [D_start, D_end, H_start, H_end, W_start, W_end]
+    Automatically trim zero-valued edges from a 3D image.
+    Returns the bounding box that contains all non-zero voxels.
     """
     D, H, W = data.shape
     D_s, D_e = 0, D - 1
@@ -47,227 +38,115 @@ def cut_edge(data):
             break
         W_e -= 1
 
-    original_shape = [D, H, W]
+    if D_s > D_e or H_s > H_e or W_s > W_e:
+        # No non-zero voxels found, use the full image
+        D_s, D_e, H_s, H_e, W_s, W_e = 0, D - 1, 0, H - 1, 0, W - 1
+
     cut_size = [int(D_s), int(D_e + 1), int(H_s), int(H_e + 1), int(W_s), int(W_e + 1)]
-    return (original_shape, cut_size)
-
-
-def fixed_crop(data, img_size):
-    """
-    Crop the 3D image to a fixed cubic size (img_size x img_size x img_size).
-    The image is cropped centrally.
-    """
-    D, H, W = data.shape
-    a = (D - img_size) / 2
-    b = (H - img_size) / 2
-    c = (W - img_size) / 2
-    cut_size = [int(a), int(D - a), int(b), int(H - b), int(c), int(W - c)]
     return cut_size
 
-def crop_images(file_path_T1, file_path_T2, file_path_gt, file_dir_T1, file_dir_T2, file_dir_gt, crop_size=160):
+def pad_to_multiple(data, multiple=64):
     """
-    Crop original T1, T2, and Seg images to a fixed size and save them.
+    Pad the data so that each dimension is a multiple of 'multiple'.
     """
-    os.makedirs(file_dir_T1, exist_ok=True)
-    os.makedirs(file_dir_T2, exist_ok=True)
-    os.makedirs(file_dir_gt, exist_ok=True)
+    D, H, W = data.shape
+    D_pad = (multiple - (D % multiple)) if D % multiple != 0 else 0
+    H_pad = (multiple - (H % multiple)) if H % multiple != 0 else 0
+    W_pad = (multiple - (W % multiple)) if W % multiple != 0 else 0
 
-    file_T1 = sorted([f for f in os.listdir(file_path_T1) if f.endswith('.nii.gz')])
-    for file in file_T1:
-        fname_T1 = os.path.join(file_path_T1, file)
-        fname_T2 = os.path.join(file_path_T2, file.replace('T1', 'T2'))
-        fname_gt = os.path.join(file_path_gt, file.replace('T1', 'Seg'))
+    pad_before_D = D_pad // 2
+    pad_after_D = D_pad - pad_before_D
 
-        img_1 = sitk.ReadImage(fname_T1)
-        spacing = img_1.GetSpacing()
-        origin = img_1.GetOrigin()
-        direction = img_1.GetDirection()
-        img_T1 = sitk.GetArrayFromImage(img_1)
+    pad_before_H = H_pad // 2
+    pad_after_H = H_pad - pad_before_H
 
-        img_2 = sitk.ReadImage(fname_T2)
-        img_T2 = sitk.GetArrayFromImage(img_2)
+    pad_before_W = W_pad // 2
+    pad_after_W = W_pad - pad_before_W
 
-        img_3 = sitk.ReadImage(fname_gt)
-        img_gt = sitk.GetArrayFromImage(img_3)
+    data_padded = np.pad(
+        data, ((pad_before_D, pad_after_D),
+               (pad_before_H, pad_after_H),
+               (pad_before_W, pad_after_W)),
+        mode='constant', constant_values=0)
+    return data_padded, (pad_before_D, pad_before_H, pad_before_W)
 
-        # Crop to fixed size
-        cs = fixed_crop(img_T1, crop_size)
-        T1 = img_T1[cs[0]:cs[1], cs[2]:cs[3], cs[4]:cs[5]]
-        T2 = img_T2[cs[0]:cs[1], cs[2]:cs[3], cs[4]:cs[5]]
-        gt = img_gt[cs[0]:cs[1], cs[2]:cs[3], cs[4]:cs[5]]
-
-        # Convert back to ITK images and keep metadata
-        img_t1 = sitk.GetImageFromArray(T1)
-        img_t2 = sitk.GetImageFromArray(T2)
-        img_GT = sitk.GetImageFromArray(gt)
-
-        img_t1.SetSpacing(spacing)
-        img_t1.SetOrigin(origin)
-        img_t1.SetDirection(direction)
-
-        img_t2.SetSpacing(spacing)
-        img_t2.SetOrigin(origin)
-        img_t2.SetDirection(direction)
-
-        img_GT.SetSpacing(spacing)
-        img_GT.SetOrigin(origin)
-        img_GT.SetDirection(direction)
-
-        # Save cropped images
-        sitk.WriteImage(img_t1, os.path.join(file_dir_T1, file))
-        sitk.WriteImage(img_t2, os.path.join(file_dir_T2, file.replace('T1', 'T2')))
-        sitk.WriteImage(img_GT, os.path.join(file_dir_gt, file.replace('T1', 'Seg')))
-
-    print("Cropping done!")
-
-
-##################################
-# Part 2: Patch Extraction
-##################################
-
-def extract_ordered_patches(path, path1, path2, patch_size: tuple, stride_size: tuple, des, des1, des2, des_zero, name):
+def extract_patches_64(data, data_t2, data_seg, patch_size=64, stride_d=64, stride_h=64, stride_w=64,
+                       base_name='Case_001_T1w', des='patch_T1w', des1='patch_T2w', des2='patch_Seg', des_zero='patch_Zero'):
     """
-    Extract ordered 3D patches from cropped T1, T2, and Seg images and save them.
+    Extract patches of size patch_size^3 from the given 3D arrays (T1w, T2w, Seg).
+    Stride in each dimension can be specified.
+    Non-zero patches are saved to des/des1/des2, zero patches to des_zero.
     """
-    File = sitk.ReadImage(path)
-    spacing = File.GetSpacing()
-    origin = File.GetOrigin()
-    dir = File.GetDirection()
-    imgs = sitk.GetArrayFromImage(File)
+    os.makedirs(des, exist_ok=True)
+    os.makedirs(des1, exist_ok=True)
+    os.makedirs(des2, exist_ok=True)
+    os.makedirs(des_zero, exist_ok=True)
 
-    File1 = sitk.ReadImage(path1)
-    imgs1 = sitk.GetArrayFromImage(File1)
-
-    File2 = sitk.ReadImage(path2)
-    imgs2 = sitk.GetArrayFromImage(File2)
-
-    h, w, z = imgs.shape
-    patch_h, patch_w, patch_z = patch_size
-    stride_h, stride_w, stride_z = stride_size
-
-    if (h - patch_h) % stride_h == 0:
-        n_patches_y = (h - patch_h) // stride_h + 1
-    else:
-        n_patches_y = (h - patch_h) // stride_h + 2
-
-    if (w - patch_w) % stride_w == 0:
-        n_patches_x = (w - patch_w) // stride_w + 1
-    else:
-        n_patches_x = (w - patch_w) // stride_w + 2
-
-    if (z - patch_z) % stride_z == 0:
-        n_patches_z = (z - patch_z) // stride_z + 1
-    else:
-        n_patches_z = (z - patch_z) // stride_z + 2
-
-    n_patches_per_img = n_patches_x * n_patches_y * n_patches_z
+    D, H, W = data.shape
     patch_idx = 1
     count_zero = 0
 
-    for i in range(n_patches_y):
-        for j in range(n_patches_x):
-            for k in range(n_patches_z):
-                if (i * stride_h + patch_h) > h:
-                    y1 = h - patch_h
-                    y2 = y1 + patch_h
-                else:
-                    y1 = i * stride_h
-                    y2 = y1 + patch_h
+    # The order of loops determines the scanning order.
+    # For each (H, W) position, we cover all patches along D with specified strides.
+    for h_start in range(0, H - patch_size + 1, stride_h):
+        for w_start in range(0, W - patch_size + 1, stride_w):
+            for d_start in range(0, D - patch_size + 1, stride_d):
+                d_end = d_start + patch_size
+                h_end = h_start + patch_size
+                w_end = w_start + patch_size
 
-                if (j * stride_w + patch_w) > w:
-                    x1 = w - patch_w
-                    x2 = x1 + patch_w
-                else:
-                    x1 = j * stride_w
-                    x2 = x1 + patch_w
-
-                if (k * stride_z + patch_z) > z:
-                    z1 = z - patch_z
-                    z2 = z1 + patch_z
-                else:
-                    z1 = k * stride_z
-                    z2 = z1 + patch_z
+                patch_arr = data[d_start:d_end, h_start:h_end, w_start:w_end]
+                patch_arr1 = data_t2[d_start:d_end, h_start:h_end, w_start:w_end]
+                patch_arr2 = data_seg[d_start:d_end, h_start:h_end, w_start:w_end]
 
                 if patch_idx < 10:
-                    patch_name = name.split('.nii.gz')[0] + '_00' + str(patch_idx) + '.nii.gz'
+                    patch_name = base_name.split('.nii.gz')[0] + '_00' + str(patch_idx) + '.nii.gz'
                 elif patch_idx < 100:
-                    patch_name = name.split('.nii.gz')[0] + '_0' + str(patch_idx) + '.nii.gz'
+                    patch_name = base_name.split('.nii.gz')[0] + '_0' + str(patch_idx) + '.nii.gz'
                 else:
-                    patch_name = name.split('.nii.gz')[0] + '_' + str(patch_idx) + '.nii.gz'
-
-                patch_arr = imgs[y1:y2, x1:x2, z1:z2]
-                patch_arr1 = imgs1[y1:y2, x1:x2, z1:z2]
-                patch_arr2 = imgs2[y1:y2, x1:x2, z1:z2]
+                    patch_name = base_name.split('.nii.gz')[0] + '_' + str(patch_idx) + '.nii.gz'
 
                 patch = sitk.GetImageFromArray(patch_arr)
                 patch1 = sitk.GetImageFromArray(patch_arr1)
                 patch2 = sitk.GetImageFromArray(patch_arr2)
 
-                patch.SetSpacing(spacing)
-                patch.SetOrigin(origin)
-                patch.SetDirection(dir)
+                patch_name_t2 = patch_name.replace('T1w', 'T2w')
+                patch_name_seg = patch_name.replace('T1w', 'Seg')
 
-                patch1.SetSpacing(spacing)
-                patch1.SetOrigin(origin)
-                patch1.SetDirection(dir)
-
-                patch2.SetSpacing(spacing)
-                patch2.SetOrigin(origin)
-                patch2.SetDirection(dir)
-
-                # Save patches
                 if np.max(patch_arr) != 0 and np.max(patch_arr1) != 0 and np.max(patch_arr2) != 0:
-                    # non-zero patch
                     sitk.WriteImage(patch, os.path.join(des, patch_name))
-                    sitk.WriteImage(patch1, os.path.join(des1, patch_name.replace('T1', 'T2')))
-                    sitk.WriteImage(patch2, os.path.join(des2, patch_name.replace('.nii', '_seg.nii')))
+                    sitk.WriteImage(patch1, os.path.join(des1, patch_name_t2))
+                    sitk.WriteImage(patch2, os.path.join(des2, patch_name_seg))
                 else:
-                    # zero patch
                     sitk.WriteImage(patch, os.path.join(des_zero, patch_name))
-                    sitk.WriteImage(patch1, os.path.join(des_zero, patch_name.replace('T1', 'T2')))
-                    sitk.WriteImage(patch2, os.path.join(des_zero, patch_name.replace('.nii', '_seg.nii')))
+                    sitk.WriteImage(patch1, os.path.join(des_zero, patch_name_t2))
+                    sitk.WriteImage(patch2, os.path.join(des_zero, patch_name_seg))
                     count_zero += 1
+
                 patch_idx += 1
 
     print(str(patch_idx - 1) + " patches extracted!")
     print(count_zero, 'patches are all zero')
 
-
 if __name__ == '__main__':
-    #====================
-    # Step 1: Cropping
-    #====================
-    base_dir = 'MRI_data/'
+    parser = argparse.ArgumentParser(description="Extract 3D patches from MRI data.")
+    parser.add_argument('--base_dir', type=str, default='MRI_data', help='Base directory containing MRI data')
+    parser.add_argument('--patch_out_base', type=str, default='patch_data_cutedge', help='Output directory for patches')
+    parser.add_argument('--patch_size', type=int, default=64, help='Patch size (cube)')
+    parser.add_argument('--stride_d', type=int, default=64, help='Stride along D dimension')
+    parser.add_argument('--stride_h', type=int, default=64, help='Stride along H dimension')
+    parser.add_argument('--stride_w', type=int, default=64, help='Stride along W dimension')
+
+    args = parser.parse_args()
+
+    base_dir = args.base_dir
     file_path_T1 = os.path.join(base_dir, 'T1w')
     file_path_T2 = os.path.join(base_dir, 'T2w')
     file_path_gt = os.path.join(base_dir, 'Tissue')
 
-    out_base_dir = 'crop_MRI_data/'
-    file_dir_T1 = os.path.join(out_base_dir, 'T1w')
-    file_dir_T2 = os.path.join(out_base_dir, 'T2w')
-    file_dir_gt = os.path.join(out_base_dir, 'Tissue')
-
-    # Make sure these directories exist
-    os.makedirs(file_dir_T1, exist_ok=True)
-    os.makedirs(file_dir_T2, exist_ok=True)
-    os.makedirs(file_dir_gt, exist_ok=True)
-
-    crop_images(file_path_T1, file_path_T2, file_path_gt, file_dir_T1, file_dir_T2, file_dir_gt, crop_size=160)
-
-    #====================
-    # Step 2: Patch Extraction
-    #====================
-
-    # Paths to the cropped images
-    T1_path = file_dir_T1
-    T2_path = file_dir_T2
-    Seg_path = file_dir_gt
-
-    # Output directories for patches
-    # Adjust these as needed
-    patch_out_base = 'patch_data'
-    dir_T1_patch = os.path.join(patch_out_base, 'T1')
-    dir_T2_patch = os.path.join(patch_out_base, 'T2')
+    patch_out_base = args.patch_out_base
+    dir_T1_patch = os.path.join(patch_out_base, 'T1w')
+    dir_T2_patch = os.path.join(patch_out_base, 'T2w')
     dir_Seg_patch = os.path.join(patch_out_base, 'Seg')
     dir_0_patch = os.path.join(patch_out_base, 'Zero')
 
@@ -276,18 +155,38 @@ if __name__ == '__main__':
     os.makedirs(dir_Seg_patch, exist_ok=True)
     os.makedirs(dir_0_patch, exist_ok=True)
 
-    # Patch parameters
-    patch_size = (64, 64, 64)
-    stride_size = (32, 32, 32)
+    list_T1 = sorted([f for f in os.listdir(file_path_T1) if f.endswith('.nii.gz')])
 
-    list_T1_imgs = [i for i in os.listdir(T1_path) if i.endswith('.nii.gz')]
-    for i in sorted(list_T1_imgs):
-        print("Processing:", i)
-        path = os.path.join(T1_path, i)
-        path1 = os.path.join(T2_path, i.replace('T1', 'T2'))
-        path2 = os.path.join(Seg_path, i.replace('.nii', '_seg.nii'))
+    for file in list_T1:
+        print("Processing:", file)
+        fname_T1 = os.path.join(file_path_T1, file)
+        fname_T2 = os.path.join(file_path_T2, file.replace('T1w', 'T2w'))
+        fname_gt = os.path.join(file_path_gt, file.replace('T1w', 'Seg'))
 
-        extract_ordered_patches(path, path1, path2, patch_size, stride_size, 
-                                dir_T1_patch, dir_T2_patch, dir_Seg_patch, dir_0_patch, i)
+        img_1 = sitk.ReadImage(fname_T1)
+        img_T1 = sitk.GetArrayFromImage(img_1)
 
-    print('Patch extraction done!!!')
+        img_2 = sitk.ReadImage(fname_T2)
+        img_T2 = sitk.GetArrayFromImage(img_2)
+
+        img_3 = sitk.ReadImage(fname_gt)
+        img_gt = sitk.GetArrayFromImage(img_3)
+
+        cs = cut_edge(img_T1)
+        T1 = img_T1[cs[0]:cs[1], cs[2]:cs[3], cs[4]:cs[5]]
+        T2 = img_T2[cs[0]:cs[1], cs[2]:cs[3], cs[4]:cs[5]]
+        gt = img_gt[cs[0]:cs[1], cs[2]:cs[3], cs[4]:cs[5]]
+
+        T1_padded, _ = pad_to_multiple(T1, args.patch_size)
+        T2_padded, _ = pad_to_multiple(T2, args.patch_size)
+        gt_padded, _ = pad_to_multiple(gt, args.patch_size)
+
+        extract_patches_64(
+            T1_padded, T2_padded, gt_padded,
+            patch_size=args.patch_size,
+            stride_d=args.stride_d, stride_h=args.stride_h, stride_w=args.stride_w,
+            base_name=file,
+            des=dir_T1_patch, des1=dir_T2_patch, des2=dir_Seg_patch, des_zero=dir_0_patch
+        )
+
+    print('All done!!!')
