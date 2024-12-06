@@ -66,11 +66,11 @@ Then run the `crop_and_patches.py` to generate training patchees, which will be 
 	        ├── ...
 # Training:
 
-'python train.py --name YourProjName --checkpoints_dir  YourModelPath  --dataroot  YourDatasetPath'
+`python train.py --name YourProjName --checkpoints_dir  YourModelPath  --dataroot  YourDatasetPath`
 
 # Inference:
 
-'python test.py --name YourProjName --checkpoints_dir YourModelPath --dataroot YourDatasetPath --whichmodel YourModelName'
+`python test.py --name YourProjName --checkpoints_dir YourModelPath --dataroot YourDatasetPath --whichmodel YourModelName`
 
 # Contacts
 For questions/bugs/feedback, please contact:
