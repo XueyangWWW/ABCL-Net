@@ -44,9 +44,9 @@ Stored two modality MRI and tissue labels in `MRI_data` folder as following stru
 	        ├── Case_004_Seg.nii.gz
 	        ├── ...
 
-Then run the `crop_and_patches.py` to generate training patchees, which will be stored in `patch_data` as follows:
+Then run the `crop_and_patches.py` to generate training patches, adjust `--patch_size, --stride_d, --stride_h, and --stride_w` as desired. It will be stored in `patch_data_cutedge` as follows:
 
-	patch_data/
+	patch_data_cutedge/
 	    ├── T1
 	    │   ├── Case_001_T1w_001.nii.gz
 	    │   ├── Case_001_T1w_002.nii.gz
@@ -66,7 +66,7 @@ Then run the `crop_and_patches.py` to generate training patchees, which will be 
 	        ├── ...
 # Training:
 
-`python train.py --name YourProjName --checkpoints_dir  YourModelPath  --dataroot  YourDatasetPath`
+`python train.py --name YourProjName --checkpoints_dir  YourModelPath  --dataroot_train  YourDatasetPath --dataroot_val  YourDatasetPath_val`
 
 # Inference:
 
