@@ -17,7 +17,6 @@ The ABCL-Net, designed for multi-task cooperation and cross-modality feature int
 ![](https://github.com/XueyangWWW/ABCL-Net/blob/main/Figure1.png)
 
 # System requirement
-Since this is a *Linux* based container, please install the container on a Linux system. The supported systems include but not limited to `Ubuntu`, `Debian` and `CentOS`. 
 
 The pipeline is developed based on deep convolutional neural network techniques by Pytorch. A GPU (≥10GB) is required to support the processing. 
 
